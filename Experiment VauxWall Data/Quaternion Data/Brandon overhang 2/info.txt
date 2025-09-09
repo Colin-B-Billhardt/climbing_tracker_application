@@ -1,0 +1,19 @@
+App version: v3.1.0.0
+Connected sensors:
+
+	Device name: QSense
+	Serial number: E58926083144-43F0
+	Firmware version: v1.5.2
+,
+	Device name: qsense2
+	Serial number: FA2C97B24FFA-7744
+	Firmware version: v1.5.2
+,
+Accelerometer sensitivity: 8g
+Gyroscope sensitivity: 1000dps
+Data mode: Quaternion
+Sampling rate: 100Hz
+Processed data sampling rate: 6Hz
+
+Start: 2025-09-06 17:58:50 (UTC+00:00)
+Stop: 2025-09-06 17:59:00 (UTC+00:00)
