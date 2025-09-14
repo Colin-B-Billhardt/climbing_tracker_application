@@ -28,3 +28,6 @@ Running the code to verify results:
 - Change the file paths to the specific trial you wish to analyze and verify
 - Run code sequentially
 
+
+Note: 9 frames were missing in ID2 trial 1 Quaternion 1 data. This gap was filled with using last observation carried forward.
+
