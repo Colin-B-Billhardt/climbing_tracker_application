@@ -31,10 +31,10 @@ def get_model_path():
     return path
 
 
-def analyze_video(video_path: str, progress_callback=None):
+def analyze_video(video_path: str, progress_callback=None, frame_skip: int = 1):
     """
-    Run pose landmarker on video and return list of:
-    { "frame_index": int, "time_ms": int, "time_s": float, "left_elbow_deg": float | null, "right_elbow_deg": float | null }
+    Run pose landmarker on video and return list of per-frame results.
+    frame_skip: process every Nth frame (1=all, 2=every 2nd, etc.) for faster analysis.
     """
     BaseOptions = mp_tasks.BaseOptions
     PoseLandmarker = vision.PoseLandmarker
@@ -71,12 +71,18 @@ def analyze_video(video_path: str, progress_callback=None):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
     results_list = []
 
+    frame_skip = max(1, int(frame_skip))
     with PoseLandmarker.create_from_options(options) as landmarker:
         frame_index = 0
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            if frame_index % frame_skip != 0:
+                frame_index += 1
+                if progress_callback and total_frames > 0:
+                    progress_callback(frame_index, total_frames)
+                continue
             time_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             detection_result = landmarker.detect_for_video(mp_image, time_ms)

@@ -3,7 +3,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import aiofiles
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -44,7 +44,10 @@ def root():
 
 
 @app.post("/api/analyze-video")
-async def analyze_video_endpoint(video: UploadFile = File(...)):
+async def analyze_video_endpoint(
+    video: UploadFile = File(...),
+    frame_skip: str | None = Form(default=None),
+):
     """Upload a video file; returns per-frame elbow angles (left/right) from pose estimation."""
     ct = (video.content_type or "").strip().lower()
     allowed = ct.startswith("video/") or ct == "application/octet-stream"
@@ -54,6 +57,12 @@ async def analyze_video_endpoint(video: UploadFile = File(...)):
             allowed = True
     if not allowed:
         raise HTTPException(400, "File must be a video (e.g. .mov, .mp4).")
+    skip = 1
+    if frame_skip is not None:
+        try:
+            skip = max(1, min(4, int(frame_skip)))
+        except ValueError:
+            pass
 
     suffix = os.path.splitext(video.filename or "")[-1] or ".mp4"
     path = os.path.join(
@@ -63,7 +72,7 @@ async def analyze_video_endpoint(video: UploadFile = File(...)):
         async with aiofiles.open(path, "wb") as f:
             while chunk := await video.read(1024 * 1024):
                 await f.write(chunk)
-        frames = analyze_video(path)
+        frames = analyze_video(path, frame_skip=skip)
         return JSONResponse(content={"frames": frames, "total_frames": len(frames)})
     except FileNotFoundError as e:
         raise HTTPException(503, str(e))

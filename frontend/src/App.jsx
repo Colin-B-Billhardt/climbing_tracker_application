@@ -19,6 +19,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [activeTab, setActiveTab] = useState('video')
+  const [fastMode, setFastMode] = useState(true)
 
   const isVideoFile = useCallback((file) => {
     if (!file) return false
@@ -51,11 +52,15 @@ export default function App() {
   const onFileSelect = useCallback((e) => {
     const f = e.target?.files?.[0]
     if (f) {
+      if (!isVideoFile(f)) {
+        setError('Please choose a video file (.mov, .mp4, .webm, etc.).')
+        return
+      }
       setFile(f)
       setError(null)
       setResult(null)
     }
-  }, [])
+  }, [isVideoFile])
 
   const runVideoAnalysis = async () => {
     if (!file) return
@@ -64,6 +69,7 @@ export default function App() {
     setResult(null)
     const form = new FormData()
     form.append('video', file)
+    if (fastMode) form.append('frame_skip', '2')
     try {
       const r = await fetch(`${API_BASE}/api/analyze-video`, {
         method: 'POST',
@@ -159,7 +165,6 @@ export default function App() {
           >
             <input
               type="file"
-              accept="video/*,.mov,.mp4,.webm,.m4v,video/quicktime"
               onChange={onFileSelect}
               style={{ display: 'none' }}
               id="video-input"
@@ -169,12 +174,23 @@ export default function App() {
                 <span style={{ color: 'var(--success)' }}>{file.name}</span>
               ) : (
                 <span style={{ color: 'var(--muted)' }}>
-                  Drop a video here or click to choose
+                  Drop a video here or click to choose (.mov, .mp4, etc.)
                 </span>
               )}
             </label>
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '0.5rem' }}>
+              Pick a video file; if you don’t see .mov, choose “All Files” in the picker or drag the file in.
+            </p>
           </div>
 
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <input
+              type="checkbox"
+              checked={fastMode}
+              onChange={(e) => setFastMode(e.target.checked)}
+            />
+            <span style={{ fontSize: '0.9rem' }}>Faster analysis (every 2nd frame) — recommended for hosted server</span>
+          </label>
           <button
             type="button"
             onClick={runVideoAnalysis}
