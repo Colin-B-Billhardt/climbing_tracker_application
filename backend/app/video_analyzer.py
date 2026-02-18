@@ -31,10 +31,16 @@ def get_model_path():
     return path
 
 
+# On slow servers (e.g. Render free tier), cap how many frames we process so the request finishes.
+# ~450 processed frames ≈ 15 sec of video at 30fps with frame_skip=2. Set to 0 to disable.
+MAX_PROCESSED_FRAMES = int(os.environ.get("MAX_ANALYSIS_FRAMES", "450"))
+
+
 def analyze_video(video_path: str, progress_callback=None, frame_skip: int = 1):
     """
     Run pose landmarker on video and return list of per-frame results.
     frame_skip: process every Nth frame (1=all, 2=every 2nd, etc.) for faster analysis.
+    Stops after MAX_PROCESSED_FRAMES (when set) so hosted servers don't run forever.
     """
     BaseOptions = mp_tasks.BaseOptions
     PoseLandmarker = vision.PoseLandmarker
@@ -103,6 +109,9 @@ def analyze_video(video_path: str, progress_callback=None, frame_skip: int = 1):
             frame_index += 1
             if progress_callback and total_frames > 0:
                 progress_callback(frame_index, total_frames)
+            if MAX_PROCESSED_FRAMES > 0 and len(results_list) >= MAX_PROCESSED_FRAMES:
+                cap.release()
+                return results_list, True
 
     cap.release()
-    return results_list
+    return results_list, False

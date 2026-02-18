@@ -74,8 +74,12 @@ async def analyze_video_endpoint(
         async with aiofiles.open(path, "wb") as f:
             while chunk := await video.read(1024 * 1024):
                 await f.write(chunk)
-        frames = analyze_video(path, frame_skip=skip)
-        return JSONResponse(content={"frames": frames, "total_frames": len(frames)})
+        frames, truncated = analyze_video(path, frame_skip=skip)
+        return JSONResponse(content={
+            "frames": frames,
+            "total_frames": len(frames),
+            "truncated": truncated,
+        })
     except FileNotFoundError as e:
         raise HTTPException(503, str(e))
     except ValueError as e:

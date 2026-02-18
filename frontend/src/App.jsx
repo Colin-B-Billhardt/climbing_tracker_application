@@ -235,6 +235,11 @@ export default function App() {
           <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Elbow angle over time</h2>
           <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
             {result.total_frames} frames
+            {result.truncated && (
+              <span style={{ color: 'var(--accent)', marginLeft: '0.5rem' }}>
+                (first ~15–30s only on hosted server)
+              </span>
+            )}
           </p>
           <div style={{ height: 320, marginBottom: '1rem' }}>
             <ResponsiveContainer width="100%" height="100%">
