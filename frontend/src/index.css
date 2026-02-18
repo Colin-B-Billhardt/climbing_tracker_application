@@ -38,3 +38,9 @@ button {
 input, select, textarea {
   font-family: inherit;
 }
+
+@keyframes progress-indeterminate {
+  0% { transform: scaleX(0.3); transform-origin: left; }
+  50% { transform: scaleX(1); transform-origin: left; }
+  100% { transform: scaleX(0.3); transform-origin: right; }
+}

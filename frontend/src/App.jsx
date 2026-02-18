@@ -18,8 +18,9 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
-  const [activeTab, setActiveTab] = useState('video')
   const [frameSkip, setFrameSkip] = useState(2)
+  const [progressTotal, setProgressTotal] = useState(0)
+  const [progressCurrent, setProgressCurrent] = useState(0)
 
   const isVideoFile = useCallback((file) => {
     if (!file) return false
@@ -67,20 +68,60 @@ export default function App() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setProgressTotal(0)
+    setProgressCurrent(0)
     const form = new FormData()
     form.append('video', file)
     form.append('frame_skip', String(frameSkip))
     try {
-      const r = await fetch(`${API_BASE}/api/analyze-video`, {
+      const r = await fetch(`${API_BASE}/api/analyze-video?stream=1`, {
         method: 'POST',
         body: form,
       })
-      const data = await r.json().catch(() => ({}))
       if (!r.ok) {
+        const data = await r.json().catch(() => ({}))
         const msg = Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join(' ') : (data.detail || data.message || r.statusText)
         throw new Error(msg || 'Analysis failed.')
       }
-      setResult({ type: 'video', ...data })
+      const contentType = r.headers.get('content-type') || ''
+      if (contentType.includes('ndjson') || contentType.includes('x-ndjson')) {
+        const reader = r.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed) continue
+            try {
+              const data = JSON.parse(trimmed)
+              if (data.event === 'start') setProgressTotal(data.total_frames ?? 0)
+              if (data.event === 'progress') setProgressCurrent(data.frame_index ?? 0)
+              if (data.event === 'done') setResult({ type: 'video', frames: data.frames, total_frames: data.total_frames, truncated: data.truncated })
+              if (data.event === 'error') throw new Error(data.message || 'Analysis failed.')
+            } catch (parseErr) {
+              if (parseErr instanceof SyntaxError) continue
+              throw parseErr
+            }
+          }
+        }
+        if (buffer.trim()) {
+          try {
+            const data = JSON.parse(buffer.trim())
+            if (data.event === 'done') setResult({ type: 'video', frames: data.frames, total_frames: data.total_frames, truncated: data.truncated })
+            if (data.event === 'error') throw new Error(data.message || 'Analysis failed.')
+          } catch (parseErr) {
+            if (!(parseErr instanceof SyntaxError)) throw parseErr
+          }
+        }
+      } else {
+        const data = await r.json().catch(() => ({}))
+        setResult({ type: 'video', ...data })
+      }
     } catch (e) {
       const msg = e.message || 'Analysis failed.'
       if (msg === 'Failed to fetch' || msg.includes('fetch')) {
@@ -94,6 +135,8 @@ export default function App() {
       }
     } finally {
       setLoading(false)
+      setProgressTotal(0)
+      setProgressCurrent(0)
     }
   }
 
@@ -124,41 +167,11 @@ export default function App() {
           Climbing Technique Tracker
         </h1>
         <p style={{ color: 'var(--muted)', marginTop: '0.5rem' }}>
-          Upload a video to analyze elbow angles per frame, or use IMU quaternion CSVs.
+          Upload a video to analyze elbow angles per frame with pose overlay.
         </p>
       </header>
 
-      <nav style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        <button
-          type="button"
-          onClick={() => setActiveTab('video')}
-          style={{
-            padding: '0.5rem 1rem',
-            background: activeTab === 'video' ? 'var(--accent)' : 'var(--surface)',
-            color: activeTab === 'video' ? 'var(--bg)' : 'var(--text)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-          }}
-        >
-          Video analysis
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('imu')}
-          style={{
-            padding: '0.5rem 1rem',
-            background: activeTab === 'imu' ? 'var(--accent)' : 'var(--surface)',
-            color: activeTab === 'imu' ? 'var(--bg)' : 'var(--text)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-          }}
-        >
-          IMU (quaternion)
-        </button>
-      </nav>
-
-      {activeTab === 'video' && (
-        <>
+      <>
           <div
             onDrop={onDrop}
             onDragOver={onDragOver}
@@ -205,6 +218,32 @@ export default function App() {
               <option value={4}>Every 4th frame — fastest</option>
             </select>
           </label>
+          {loading && (
+            <div style={{ marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.25rem' }}>
+                <span>{progressTotal > 0 ? `Processing frame ${progressCurrent} / ${progressTotal}` : 'Analyzing…'}</span>
+                {progressTotal > 0 && (
+                  <span>{Math.round((progressCurrent / progressTotal) * 100)}%</span>
+                )}
+              </div>
+              {progressTotal > 0 ? (
+                <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${Math.min(100, (progressCurrent / progressTotal) * 100)}%`,
+                      background: 'var(--accent)',
+                      transition: 'width 0.2s ease',
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: '100%', background: 'var(--accent)', transformOrigin: 'left', animation: 'progress-indeterminate 1.2s ease-in-out infinite' }} />
+                </div>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={runVideoAnalysis}
@@ -220,12 +259,7 @@ export default function App() {
           >
             {loading ? 'Analyzing…' : 'Analyze video'}
           </button>
-        </>
-      )}
-
-      {activeTab === 'imu' && (
-        <IMUTab />
-      )}
+      </>
 
       {error && (
         <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{error}</p>
@@ -404,95 +438,5 @@ function VideoOverlayWithMetrics({ file, frames }) {
         </div>
       </div>
     </section>
-  )
-}
-
-function IMUTab() {
-  const [sensor1, setSensor1] = useState(null)
-  const [sensor2, setSensor2] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [result, setResult] = useState(null)
-
-  const runImuAnalysis = async () => {
-    if (!sensor1 || !sensor2) return
-    setLoading(true)
-    setError(null)
-    setResult(null)
-    const form = new FormData()
-    form.append('sensor1', sensor1)
-    form.append('sensor2', sensor2)
-    try {
-      const r = await fetch(`${API_BASE}/api/analyze-imu`, { method: 'POST', body: form })
-      const data = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(data.detail || data.message || r.statusText)
-      setResult(data)
-    } catch (e) {
-      setError(e.message || 'IMU analysis failed.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const chartData = result?.angles?.map((a) => ({ timestamp: a.timestamp, 'Angle (°)': a.angle_deg })) ?? []
-
-  return (
-    <>
-      <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
-        Upload two tab-delimited quaternion CSVs (timestamp, w, x, y, z). First 3 rows are skipped as header.
-      </p>
-      <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ minWidth: 120 }}>Sensor 1 (reference):</span>
-          <input
-            type="file"
-            accept=".csv,.txt"
-            onChange={(e) => { setSensor1(e.target.files?.[0] ?? null); setError(null) }}
-          />
-          {sensor1 && <span style={{ color: 'var(--success)' }}>{sensor1.name}</span>}
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ minWidth: 120 }}>Sensor 2 (segment):</span>
-          <input
-            type="file"
-            accept=".csv,.txt"
-            onChange={(e) => { setSensor2(e.target.files?.[0] ?? null); setError(null) }}
-          />
-          {sensor2 && <span style={{ color: 'var(--success)' }}>{sensor2.name}</span>}
-        </label>
-      </div>
-      <button
-        type="button"
-        onClick={runImuAnalysis}
-        disabled={!sensor1 || !sensor2 || loading}
-        style={{
-          padding: '0.6rem 1.2rem',
-          background: sensor1 && sensor2 && !loading ? 'var(--accent)' : 'var(--border)',
-          color: sensor1 && sensor2 && !loading ? 'var(--bg)' : 'var(--muted)',
-          border: 'none',
-          borderRadius: 'var(--radius)',
-          fontWeight: 600,
-        }}
-      >
-        {loading ? 'Analyzing…' : 'Analyze IMU'}
-      </button>
-      {error && <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{error}</p>}
-      {result?.angles?.length > 0 && (
-        <section style={{ marginTop: '2rem' }}>
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Elbow angle from IMU</h2>
-          <div style={{ height: 320 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="timestamp" stroke="var(--muted)" fontSize={12} tick={{ fontSize: 10 }} />
-                <YAxis stroke="var(--muted)" fontSize={12} />
-                <Tooltip contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)' }} />
-                <Line type="monotone" dataKey="Angle (°)" stroke="var(--accent)" dot={false} strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      )}
-    </>
   )
 }
