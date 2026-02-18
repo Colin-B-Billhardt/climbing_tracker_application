@@ -19,7 +19,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [activeTab, setActiveTab] = useState('video')
-  const [fastMode, setFastMode] = useState(true)
+  const [frameSkip, setFrameSkip] = useState(2)
 
   const isVideoFile = useCallback((file) => {
     if (!file) return false
@@ -69,7 +69,7 @@ export default function App() {
     setResult(null)
     const form = new FormData()
     form.append('video', file)
-    if (fastMode) form.append('frame_skip', '2')
+    form.append('frame_skip', String(frameSkip))
     try {
       const r = await fetch(`${API_BASE}/api/analyze-video`, {
         method: 'POST',
@@ -87,7 +87,7 @@ export default function App() {
         setError(
           'Request failed. Try: (1) Wait 30s and retry (server may be waking up). ' +
           '(2) In Render, set the backend env var CORS_ORIGINS to your frontend URL (e.g. https://climbing-tracker-frontend.onrender.com). ' +
-          '(3) Use a shorter video and keep "Faster analysis" checked.'
+          '(3) Use a shorter video or choose "Every 3rd/4th frame" for speed.'
         )
       } else {
         setError(msg)
@@ -193,12 +193,17 @@ export default function App() {
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <input
-              type="checkbox"
-              checked={fastMode}
-              onChange={(e) => setFastMode(e.target.checked)}
-            />
-            <span style={{ fontSize: '0.9rem' }}>Faster analysis (every 2nd frame) — recommended for hosted server</span>
+            <span style={{ fontSize: '0.9rem' }}>Speed:</span>
+            <select
+              value={frameSkip}
+              onChange={(e) => setFrameSkip(Number(e.target.value))}
+              style={{ padding: '0.25rem 0.5rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)' }}
+            >
+              <option value={1}>Every frame (slowest, smoothest)</option>
+              <option value={2}>Every 2nd frame — good balance</option>
+              <option value={3}>Every 3rd frame — faster</option>
+              <option value={4}>Every 4th frame — fastest</option>
+            </select>
           </label>
           <button
             type="button"

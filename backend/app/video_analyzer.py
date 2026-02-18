@@ -35,6 +35,10 @@ def get_model_path():
 # ~450 processed frames ≈ 15 sec of video at 30fps with frame_skip=2. Set to 0 to disable.
 MAX_PROCESSED_FRAMES = int(os.environ.get("MAX_ANALYSIS_FRAMES", "450"))
 
+# Resize frames so longest side is this many pixels before pose detection. Smaller = faster, less accurate.
+# e.g. 320 or 480. Set to 0 to disable (full resolution).
+PROCESSING_MAX_DIM = int(os.environ.get("PROCESSING_MAX_DIM", "0"))
+
 
 def analyze_video(video_path: str, progress_callback=None, frame_skip: int = 1):
     """
@@ -90,7 +94,14 @@ def analyze_video(video_path: str, progress_callback=None, frame_skip: int = 1):
                     progress_callback(frame_index, total_frames)
                 continue
             time_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if PROCESSING_MAX_DIM > 0:
+                h, w = img.shape[:2]
+                if max(h, w) > PROCESSING_MAX_DIM:
+                    scale = PROCESSING_MAX_DIM / max(h, w)
+                    new_w, new_h = int(w * scale), int(h * scale)
+                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img)
             detection_result = landmarker.detect_for_video(mp_image, time_ms)
             left_deg, right_deg = elbow_angles_from_result(detection_result)
             # Serialize normalized image landmarks (x,y in [0,1]) for overlay drawing

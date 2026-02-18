@@ -54,6 +54,13 @@ Open **http://localhost:5173**. Use “Video analysis” to drop a video and run
 - **pose_landmarks copy.ipynb** – original live webcam + pose pipeline (reference).
 - **quaternion_analyses.ipynb** – was in repo for IMU/quaternion logic (now reflected in `backend/app/imu_utils.py`).
 
+## Faster processing (hosted / long videos)
+
+- **Frontend:** Use the **Speed** dropdown: “Every 3rd frame” or “Every 4th frame” to process fewer frames (faster, slightly less smooth overlay).
+- **Backend env (e.g. on Render):**
+  - **MAX_ANALYSIS_FRAMES** – Cap processed frames so requests finish (default `450` ≈ 15–30s of video). Set to `0` to disable.
+  - **PROCESSING_MAX_DIM** – Resize each frame so the longest side is this many pixels before pose detection (e.g. `320` or `480`). Smaller = faster, slightly less accurate. Default `0` (no resize).
+
 ## CSV format (IMU)
 
 Tab-delimited, first 3 rows skipped. Columns: timestamp, w, x, y, z (quaternion). Same format as the original Qsense/Quaternion_*.csv files.
