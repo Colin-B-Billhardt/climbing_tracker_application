@@ -1,33 +1,59 @@
-# Climbing_Tracker
-A project that aims to assess the accuracy of using a computer vision model (MediaPipe) to track features such as such as joint angles and CoM from climbers. Using inertial measurement units (IMUs) as a ground truth to verify the accuracy of computer vision results.
+# Climbing Technique Tracker
 
-Basic Testing Procedure:
-- Using Mediapipe to record climbers on the wall and retrieve PoseLandMarks
-  - Using the PoseLandMarks to calculate elbow joint angle and centre of mass (CoM)
-  - Joint angle is calculate with a custom function taking shoulder, elbow and wrist landmarks and using basic trigonemtry to calculate elbow angle
-  - CoM is calculated by giving each body segment (upper arm, lowearm, torso, upper thigh etc.) a specific weighting and calcualting the weighted midpoint. This is based on the following research paper: Le Mouel (2025) Improved accuracy of the whole body Center of Mass position through Kalman filtering, https://doi.org/10.1101/2024.07.24.604923
-- Climbers are asked to wear inertial measurement units (IMUs) while climbing. One is placed in the middle of the forearm and the second is placed in the middle of the upper arm.
-  - Using the IMUs outputed quaternion data, a ground truth for the elbow angle can be calculated from which we can compare the Mediapipe elbow angle output.
+Full-stack web app to analyze **elbow angles** from:
 
-Running the code : 
-- Download code directory
-- Install necessary libaries and MediaPipe Pose model
-- Change local file path for the MediaPipe Pose model to match your personal device
-- Run Pose_Landmarks.ipynb file sequentially.
-- Code will access device camera. Iterupt code once you your test is complete.
-- Continue running the rest of the code
-- Code will output a results.csv file containing Timestamps, PoseLandMarks, WorldLandMarks, Elbow Angle, CoM (Men), CoM (Women)
-- Run Quaternion_analysis.ipynb code to analyse computer vision and IMU data. Change file paths for your data accordingly.
+1. **Video** – upload a recording; pose estimation (MediaPipe) runs on each frame and returns left/right elbow angles over time.
+2. **IMU** – upload two quaternion CSVs from sensors (e.g. upper arm + forearm); angles are computed from relative rotation.
 
-Running the code to verify results:
-- Download code directory with "Raw_data" folder 
-- Change local file path for the MediaPipe Pose model to match your personal device
-- Run Quaternion_analysis.ipynb code to analyse raw_data files.
-- Each trial for each participant has 2 quaternion files associated (located in "Quaternion data" folder) and one CV data file located in the "Raw_data" folder
-- Each data file has the id name and trial number attached. For example, participant 3 trial 2 would be "id_2_t2". (note participants start from id_0)
-- Change the file paths to the specific trial you wish to analyze and verify
-- Run code sequentially
+## Quick start
 
+### 1. Pose model (required for video analysis)
 
-Note: 9 frames were missing in ID2 trial 1 Quaternion 1 data. This gap was filled with using last observation carried forward.
+Download the MediaPipe pose landmarker model once:
 
+```bash
+cd backend
+python scripts/download_model.py
+```
+
+Or place your own `pose_landmarker_full.task` (or `pose_landmarker_lite.task`) in `backend/models/` or the project root. You can also set:
+
+```bash
+export POSE_LANDMARKER_MODEL=/path/to/pose_landmarker_full.task
+```
+
+### 2. Backend (Python)
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**. Use “Video analysis” to drop a video and run analysis, or “IMU (quaternion)” to upload two tab-delimited quaternion CSVs.
+
+## API
+
+- **POST /api/analyze-video** – body: `video` (file). Returns `{ "frames": [...], "total_frames": N }` with `frame_index`, `time_s`, `left_elbow_deg`, `right_elbow_deg` per frame.
+- **POST /api/analyze-imu** – body: `sensor1`, `sensor2` (files). Returns `{ "angles": [ { "angle_deg", "timestamp" }, ... ] }`.
+
+## Project layout
+
+- **backend/** – FastAPI app, MediaPipe video processing, quaternion→angle logic.
+- **frontend/** – React + Vite UI: upload, run analysis, view chart and download CSV.
+- **pose_landmarks copy.ipynb** – original live webcam + pose pipeline (reference).
+- **quaternion_analyses.ipynb** – was in repo for IMU/quaternion logic (now reflected in `backend/app/imu_utils.py`).
+
+## CSV format (IMU)
+
+Tab-delimited, first 3 rows skipped. Columns: timestamp, w, x, y, z (quaternion). Same format as the original Qsense/Quaternion_*.csv files.
