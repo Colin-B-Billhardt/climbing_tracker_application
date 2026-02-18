@@ -5,6 +5,7 @@ services:
   # Backend API (FastAPI + MediaPipe)
   - type: web
     runtime: python
+    plan: free
     name: climbing-tracker-api
     rootDir: backend
     buildCommand: pip install -r requirements.txt && python scripts/download_model.py
