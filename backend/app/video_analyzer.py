@@ -55,7 +55,17 @@ def analyze_video(video_path: str, progress_callback=None):
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        raise ValueError(f"Cannot open video: {video_path}")
+        raise ValueError(
+            "Could not open video. MP4 (H.264) is most reliable. "
+            "Try converting .mov to MP4 with QuickTime (File → Export) or HandBrake."
+        )
+    ret, first_frame = cap.read()
+    if not ret or first_frame is None:
+        cap.release()
+        raise ValueError(
+            "Could not read any frames from the video. Try converting to MP4 (H.264)."
+        )
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0

@@ -20,18 +20,26 @@ export default function App() {
   const [result, setResult] = useState(null)
   const [activeTab, setActiveTab] = useState('video')
 
+  const isVideoFile = useCallback((file) => {
+    if (!file) return false
+    const t = (file.type || '').toLowerCase()
+    const name = (file.name || '').toLowerCase()
+    const videoTypes = ['.mov', '.mp4', '.webm', '.m4v', '.avi']
+    return t.startsWith('video/') || videoTypes.some((ext) => name.endsWith(ext))
+  }, [])
+
   const onDrop = useCallback((e) => {
     e.preventDefault()
     setDrag(false)
     const f = e.dataTransfer?.files?.[0]
-    if (f && f.type.startsWith('video/')) {
+    if (f && isVideoFile(f)) {
       setFile(f)
       setError(null)
       setResult(null)
     } else if (f) {
-      setError('Please drop a video file (e.g. MP4).')
+      setError('Please drop a video file (e.g. .mov, .mp4).')
     }
-  }, [])
+  }, [isVideoFile])
 
   const onDragOver = useCallback((e) => {
     e.preventDefault()
@@ -62,10 +70,13 @@ export default function App() {
         body: form,
       })
       const data = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(data.detail || data.message || r.statusText)
+      if (!r.ok) {
+        const msg = Array.isArray(data.detail) ? data.detail.map((d) => d.msg).join(' ') : (data.detail || data.message || r.statusText)
+        throw new Error(msg || 'Analysis failed.')
+      }
       setResult({ type: 'video', ...data })
     } catch (e) {
-      setError(e.message || 'Analysis failed.')
+      setError(e.message || 'Analysis failed. If you used .mov, try converting to MP4 (QuickTime: File → Export).')
     } finally {
       setLoading(false)
     }
@@ -148,7 +159,7 @@ export default function App() {
           >
             <input
               type="file"
-              accept="video/*"
+              accept="video/*,.mov,.mp4,.webm,.m4v,video/quicktime"
               onChange={onFileSelect}
               style={{ display: 'none' }}
               id="video-input"

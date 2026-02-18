@@ -46,8 +46,14 @@ def root():
 @app.post("/api/analyze-video")
 async def analyze_video_endpoint(video: UploadFile = File(...)):
     """Upload a video file; returns per-frame elbow angles (left/right) from pose estimation."""
-    if not video.content_type or not video.content_type.startswith("video/"):
-        raise HTTPException(400, "File must be a video (e.g. video/mp4)")
+    ct = (video.content_type or "").strip().lower()
+    allowed = ct.startswith("video/") or ct == "application/octet-stream"
+    if video.filename:
+        ext = (video.filename or "").lower().split(".")[-1]
+        if ext in ("mov", "mp4", "webm", "m4v", "avi"):
+            allowed = True
+    if not allowed:
+        raise HTTPException(400, "File must be a video (e.g. .mov, .mp4).")
 
     suffix = os.path.splitext(video.filename or "")[-1] or ".mp4"
     path = os.path.join(
@@ -63,6 +69,14 @@ async def analyze_video_endpoint(video: UploadFile = File(...)):
         raise HTTPException(503, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:
+        err = str(e)
+        if "video" in err.lower() or "open" in err.lower() or "decode" in err.lower():
+            raise HTTPException(
+                400,
+                "Could not read this video. MP4 (H.264) works best. Try converting your .mov in QuickTime (File → Export) or with HandBrake.",
+            )
+        raise HTTPException(500, err)
     finally:
         if os.path.isfile(path):
             try:
