@@ -1,7 +1,16 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? '' : '')
+
+// MediaPipe pose skeleton connections (pairs of landmark indices)
+const POSE_CONNECTIONS = [
+  [11, 12], [11, 13], [13, 15], [15, 17], [15, 19], [15, 21], [17, 19],
+  [12, 14], [14, 16], [16, 18], [16, 20], [16, 22], [18, 20],
+  [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [27, 29], [27, 31], [29, 31],
+  [24, 26], [26, 28], [28, 30], [28, 32], [30, 32],
+  [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8], [9, 10],
+]
 
 export default function App() {
   const [file, setFile] = useState(null)
@@ -181,6 +190,10 @@ export default function App() {
         <p style={{ color: 'var(--error)', marginTop: '1rem' }}>{error}</p>
       )}
 
+      {result?.type === 'video' && result?.frames?.length > 0 && file && (
+        <VideoOverlayWithMetrics file={file} frames={result.frames} />
+      )}
+
       {result?.type === 'video' && result?.frames?.length > 0 && (
         <section style={{ marginTop: '2rem' }}>
           <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Elbow angle over time</h2>
@@ -219,6 +232,132 @@ export default function App() {
         </section>
       )}
     </div>
+  )
+}
+
+function VideoOverlayWithMetrics({ file, frames }) {
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const [videoUrl, setVideoUrl] = useState(null)
+  const [currentFrame, setCurrentFrame] = useState(null)
+
+  useEffect(() => {
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    setVideoUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  useEffect(() => {
+    if (!videoRef.current || !canvasRef.current || !frames?.length || !videoUrl) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+
+    const drawFrame = () => {
+      if (video.readyState < 2) return
+      const t = video.currentTime
+      const idx = Math.min(
+        Math.round((t / (video.duration || 1)) * (frames.length - 1)),
+        frames.length - 1
+      )
+      const frame = frames[Math.max(0, idx)]
+      setCurrentFrame(frame)
+      if (!frame?.landmarks?.length) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        return
+      }
+      const w = video.videoWidth
+      const h = video.videoHeight
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w
+        canvas.height = h
+      }
+      ctx.clearRect(0, 0, w, h)
+      const scaleX = w
+      const scaleY = h
+      const toX = (lm) => lm.x * scaleX
+      const toY = (lm) => lm.y * scaleY
+      ctx.strokeStyle = 'rgba(124, 176, 131, 0.9)'
+      ctx.lineWidth = Math.max(2, w / 300)
+      ctx.beginPath()
+      for (const [i, j] of POSE_CONNECTIONS) {
+        if (frame.landmarks[i] && frame.landmarks[j]) {
+          ctx.moveTo(toX(frame.landmarks[i]), toY(frame.landmarks[i]))
+          ctx.lineTo(toX(frame.landmarks[j]), toY(frame.landmarks[j]))
+        }
+      }
+      ctx.stroke()
+      ctx.fillStyle = 'rgba(196, 165, 116, 0.95)'
+      for (const lm of frame.landmarks) {
+        ctx.beginPath()
+        ctx.arc(toX(lm), toY(lm), Math.max(3, w / 150), 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+
+    const onTimeUpdate = () => drawFrame()
+    const onLoadedData = () => {
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      drawFrame()
+    }
+    video.addEventListener('timeupdate', onTimeUpdate)
+    video.addEventListener('loadeddata', onLoadedData)
+    if (video.readyState >= 2) drawFrame()
+    return () => {
+      video.removeEventListener('timeupdate', onTimeUpdate)
+      video.removeEventListener('loadeddata', onLoadedData)
+    }
+  }, [frames, videoUrl])
+
+  if (!videoUrl) return null
+
+  return (
+    <section style={{ marginTop: '2rem' }}>
+      <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Video with pose overlay</h2>
+      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ position: 'relative', lineHeight: 0, maxWidth: '100%' }}>
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            controls
+            playsInline
+            style={{ display: 'block', maxWidth: '100%', maxHeight: 400 }}
+          />
+          <canvas
+            ref={canvasRef}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
+        <div
+          style={{
+            minWidth: 200,
+            padding: '1rem',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+          }}
+        >
+          <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.5rem' }}>
+            Current frame
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--success)' }}>
+            Left elbow: {currentFrame?.left_elbow_deg != null ? `${currentFrame.left_elbow_deg}°` : '—'}
+          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--accent)', marginTop: '0.25rem' }}>
+            Right elbow: {currentFrame?.right_elbow_deg != null ? `${currentFrame.right_elbow_deg}°` : '—'}
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 

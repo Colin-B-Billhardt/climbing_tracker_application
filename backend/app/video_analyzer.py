@@ -71,12 +71,18 @@ def analyze_video(video_path: str, progress_callback=None):
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             detection_result = landmarker.detect_for_video(mp_image, time_ms)
             left_deg, right_deg = elbow_angles_from_result(detection_result)
+            # Serialize normalized image landmarks (x,y in [0,1]) for overlay drawing
+            landmarks = []
+            if detection_result.pose_landmarks and len(detection_result.pose_landmarks) > 0:
+                for lm in detection_result.pose_landmarks[0]:
+                    landmarks.append({"x": round(lm.x, 5), "y": round(lm.y, 5), "z": round(lm.z, 5)})
             results_list.append({
                 "frame_index": frame_index,
                 "time_ms": time_ms,
                 "time_s": round(time_ms / 1000.0, 3),
                 "left_elbow_deg": round(left_deg, 2) if left_deg is not None else None,
                 "right_elbow_deg": round(right_deg, 2) if right_deg is not None else None,
+                "landmarks": landmarks,
             })
             frame_index += 1
             if progress_callback and total_frames > 0:
