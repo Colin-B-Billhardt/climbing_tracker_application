@@ -24,6 +24,8 @@ _origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
+    "https://climbing-tracker-frontend.onrender.com",
+    "http://climbing-tracker-frontend.onrender.com",
 ]
 _cors_env = os.environ.get("CORS_ORIGINS", "").strip()
 if _cors_env:

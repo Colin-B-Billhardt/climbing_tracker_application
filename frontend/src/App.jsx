@@ -82,7 +82,16 @@ export default function App() {
       }
       setResult({ type: 'video', ...data })
     } catch (e) {
-      setError(e.message || 'Analysis failed. If you used .mov, try converting to MP4 (QuickTime: File → Export).')
+      const msg = e.message || 'Analysis failed.'
+      if (msg === 'Failed to fetch' || msg.includes('fetch')) {
+        setError(
+          'Request failed. Try: (1) Wait 30s and retry (server may be waking up). ' +
+          '(2) In Render, set the backend env var CORS_ORIGINS to your frontend URL (e.g. https://climbing-tracker-frontend.onrender.com). ' +
+          '(3) Use a shorter video and keep "Faster analysis" checked.'
+        )
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
