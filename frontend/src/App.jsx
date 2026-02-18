@@ -142,20 +142,24 @@ export default function App() {
 
   const chartData = result?.frames?.map((f) => ({
     time_s: f.time_s,
-    'Left elbow (°)': f.left_elbow_deg,
-    'Right elbow (°)': f.right_elbow_deg,
+    'L elbow (°)': f.left_elbow_deg,
+    'R elbow (°)': f.right_elbow_deg,
+    'L hip (°)': f.left_hip_deg,
+    'R hip (°)': f.right_hip_deg,
+    'L knee (°)': f.left_knee_deg,
+    'R knee (°)': f.right_knee_deg,
   })) ?? []
 
   const downloadCsv = () => {
     if (!result?.frames?.length) return
-    const headers = ['frame_index', 'time_s', 'left_elbow_deg', 'right_elbow_deg']
+    const headers = ['frame_index', 'time_s', 'left_elbow_deg', 'right_elbow_deg', 'left_hip_deg', 'right_hip_deg', 'left_knee_deg', 'right_knee_deg']
     const rows = result.frames.map((f) =>
-      [f.frame_index, f.time_s, f.left_elbow_deg ?? '', f.right_elbow_deg ?? ''].join(',')
+      [f.frame_index, f.time_s, f.left_elbow_deg ?? '', f.right_elbow_deg ?? '', f.left_hip_deg ?? '', f.right_hip_deg ?? '', f.left_knee_deg ?? '', f.right_knee_deg ?? ''].join(',')
     )
     const blob = new Blob([headers.join(',') + '\n' + rows.join('\n')], { type: 'text/csv' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `elbow_angles_${file?.name?.replace(/\.[^.]+$/, '') || 'export'}.csv`
+    a.download = `joint_angles_${file?.name?.replace(/\.[^.]+$/, '') || 'export'}.csv`
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -167,7 +171,7 @@ export default function App() {
           Climbing Technique Tracker
         </h1>
         <p style={{ color: 'var(--muted)', marginTop: '0.5rem' }}>
-          Upload a video to analyze elbow angles per frame with pose overlay.
+          Upload a video to analyze elbow, hip, and knee angles per frame with pose overlay.
         </p>
       </header>
 
@@ -271,7 +275,7 @@ export default function App() {
 
       {result?.type === 'video' && result?.frames?.length > 0 && (
         <section style={{ marginTop: '2rem' }}>
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Elbow angle over time</h2>
+          <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Joint angles over time</h2>
           <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
             {result.total_frames} frames
             {result.truncated && (
@@ -280,7 +284,7 @@ export default function App() {
               </span>
             )}
           </p>
-          <div style={{ height: 320, marginBottom: '1rem' }}>
+          <div style={{ height: 360, marginBottom: '1rem' }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -291,8 +295,12 @@ export default function App() {
                   labelStyle={{ color: 'var(--text)' }}
                 />
                 <Legend />
-                <Line type="monotone" dataKey="Left elbow (°)" stroke="#7cb083" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="Right elbow (°)" stroke="#c4a574" dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="L elbow (°)" stroke="#7cb083" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="R elbow (°)" stroke="#c4a574" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="L hip (°)" stroke="#6b9bd1" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="R hip (°)" stroke="#d4a574" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="L knee (°)" stroke="#9b7cb0" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="R knee (°)" stroke="#b08c7c" dot={false} strokeWidth={1.5} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -429,11 +437,23 @@ function VideoOverlayWithMetrics({ file, frames }) {
           <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.5rem' }}>
             Current frame
           </div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--success)' }}>
-            Left elbow: {currentFrame?.left_elbow_deg != null ? `${currentFrame.left_elbow_deg}°` : '—'}
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--success)' }}>
+            L elbow: {currentFrame?.left_elbow_deg != null ? `${currentFrame.left_elbow_deg}°` : '—'}
           </div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--accent)', marginTop: '0.25rem' }}>
-            Right elbow: {currentFrame?.right_elbow_deg != null ? `${currentFrame.right_elbow_deg}°` : '—'}
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent)' }}>
+            R elbow: {currentFrame?.right_elbow_deg != null ? `${currentFrame.right_elbow_deg}°` : '—'}
+          </div>
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#6b9bd1', marginTop: '0.35rem' }}>
+            L hip: {currentFrame?.left_hip_deg != null ? `${currentFrame.left_hip_deg}°` : '—'}
+          </div>
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#d4a574' }}>
+            R hip: {currentFrame?.right_hip_deg != null ? `${currentFrame.right_hip_deg}°` : '—'}
+          </div>
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#9b7cb0', marginTop: '0.35rem' }}>
+            L knee: {currentFrame?.left_knee_deg != null ? `${currentFrame.left_knee_deg}°` : '—'}
+          </div>
+          <div style={{ fontSize: '1rem', fontWeight: 600, color: '#b08c7c' }}>
+            R knee: {currentFrame?.right_knee_deg != null ? `${currentFrame.right_knee_deg}°` : '—'}
           </div>
         </div>
       </div>

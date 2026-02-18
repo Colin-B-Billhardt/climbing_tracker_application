@@ -7,7 +7,7 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_tasks
 from mediapipe.tasks.python import vision
-from app.pose_utils import elbow_angles_from_result
+from app.pose_utils import elbow_angles_from_result, hip_angles_from_result, knee_angles_from_result
 
 # Optional: download default model if not present
 DEFAULT_MODEL_URL = (
@@ -103,7 +103,9 @@ def analyze_video(video_path: str, progress_callback=None, frame_skip: int = 1):
                     img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img)
             detection_result = landmarker.detect_for_video(mp_image, time_ms)
-            left_deg, right_deg = elbow_angles_from_result(detection_result)
+            left_elb, right_elb = elbow_angles_from_result(detection_result)
+            left_hip, right_hip = hip_angles_from_result(detection_result)
+            left_knee, right_knee = knee_angles_from_result(detection_result)
             # Serialize normalized image landmarks (x,y in [0,1]) for overlay drawing
             landmarks = []
             if detection_result.pose_landmarks and len(detection_result.pose_landmarks) > 0:
@@ -113,8 +115,12 @@ def analyze_video(video_path: str, progress_callback=None, frame_skip: int = 1):
                 "frame_index": frame_index,
                 "time_ms": time_ms,
                 "time_s": round(time_ms / 1000.0, 3),
-                "left_elbow_deg": round(left_deg, 2) if left_deg is not None else None,
-                "right_elbow_deg": round(right_deg, 2) if right_deg is not None else None,
+                "left_elbow_deg": round(left_elb, 2) if left_elb is not None else None,
+                "right_elbow_deg": round(right_elb, 2) if right_elb is not None else None,
+                "left_hip_deg": round(left_hip, 2) if left_hip is not None else None,
+                "right_hip_deg": round(right_hip, 2) if right_hip is not None else None,
+                "left_knee_deg": round(left_knee, 2) if left_knee is not None else None,
+                "right_knee_deg": round(right_knee, 2) if right_knee is not None else None,
                 "landmarks": landmarks,
             })
             frame_index += 1

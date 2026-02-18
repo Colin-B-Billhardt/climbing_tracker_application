@@ -1,9 +1,6 @@
 # Climbing Technique Tracker
 
-Full-stack web app to analyze **elbow angles** from:
-
-1. **Video** – upload a recording; pose estimation (MediaPipe) runs on each frame and returns left/right elbow angles over time.
-2. **IMU** – upload two quaternion CSVs from sensors (e.g. upper arm + forearm); angles are computed from relative rotation.
+Full-stack web app to analyze **elbow angles** from video: upload a recording, and pose estimation (MediaPipe) runs on each frame and returns left/right elbow angles over time, with a skeleton overlay and chart.
 
 ## Quick start
 
@@ -40,19 +37,17 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173**. Use “Video analysis” to drop a video and run analysis, or “IMU (quaternion)” to upload two tab-delimited quaternion CSVs.
+Open **http://localhost:5173**. Drop a video and run analysis to get elbow angles, pose overlay, and a chart.
 
 ## API
 
-- **POST /api/analyze-video** – body: `video` (file). Returns `{ "frames": [...], "total_frames": N }` with `frame_index`, `time_s`, `left_elbow_deg`, `right_elbow_deg` per frame.
-- **POST /api/analyze-imu** – body: `sensor1`, `sensor2` (files). Returns `{ "angles": [ { "angle_deg", "timestamp" }, ... ] }`.
+- **POST /api/analyze-video** – body: `video` (file), optional `frame_skip` (1–4). Returns `{ "frames": [...], "total_frames": N, "truncated": bool }` with per-frame `time_s`, `left_elbow_deg`, `right_elbow_deg`, and `landmarks` for overlay.
 
 ## Project layout
 
-- **backend/** – FastAPI app, MediaPipe video processing, quaternion→angle logic.
-- **frontend/** – React + Vite UI: upload, run analysis, view chart and download CSV.
+- **backend/** – FastAPI app, MediaPipe video processing.
+- **frontend/** – React + Vite UI: upload, run analysis, pose overlay, chart, CSV download.
 - **pose_landmarks copy.ipynb** – original live webcam + pose pipeline (reference).
-- **quaternion_analyses.ipynb** – was in repo for IMU/quaternion logic (now reflected in `backend/app/imu_utils.py`).
 
 ## Faster processing (hosted / long videos)
 
@@ -61,6 +56,11 @@ Open **http://localhost:5173**. Use “Video analysis” to drop a video and run
   - **MAX_ANALYSIS_FRAMES** – Cap processed frames so requests finish (default `450` ≈ 15–30s of video). Set to `0` to disable.
   - **PROCESSING_MAX_DIM** – Resize each frame so the longest side is this many pixels before pose detection (e.g. `320` or `480`). Smaller = faster, slightly less accurate. Default `0` (no resize).
 
-## CSV format (IMU)
+## Possible future features
 
-Tab-delimited, first 3 rows skipped. Columns: timestamp, w, x, y, z (quaternion). Same format as the original Qsense/Quaternion_*.csv files.
+- **Summary stats** – e.g. mean/min/max elbow angle per arm, time in range.
+- **Knee / hip angles** – same pipeline, different landmarks.
+- **File size limit** – reject very large uploads with a clear message.
+- **Progress indicator** – “Processing frame 120 / 450” during analysis.
+- **Compare two videos** – overlay two angle curves (e.g. before/after).
+- **Export overlay video** – server or client renders the skeleton onto the video and returns an MP4.
