@@ -4,8 +4,12 @@ import re
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from contextlib import asynccontextmanager
 from queue import Queue
+
+_CHAT_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+GEMINI_REQUEST_TIMEOUT = int(os.environ.get("GEMINI_REQUEST_TIMEOUT", "45"))
 
 import aiofiles
 from fastapi import Body, FastAPI, File, Form, Query, UploadFile, HTTPException
@@ -15,7 +19,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.video_analyzer import analyze_video
 
 
-def _angle_summary_for_llm(frames: list, max_rows: int = 80) -> str:
+def _angle_summary_for_llm(frames: list, max_rows: int = 50) -> str:
     """Build a compact text summary of frame angles for the LLM context."""
     if not frames:
         return "No frame data available."
@@ -220,38 +224,53 @@ async def chat(
         client = genai.Client(api_key=api_key)
         model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite").strip() or "gemini-2.0-flash-lite"
         config = genai.types.GenerateContentConfig(system_instruction=[system])
+        timeout_sec = max(15, min(120, GEMINI_REQUEST_TIMEOUT))
+
+        def _call_gemini():
+            return client.models.generate_content(
+                model=model,
+                contents=user_block,
+                config=config,
+            )
+
         last_err = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=user_block,
-                    config=config,
-                )
+                future = _CHAT_EXECUTOR.submit(_call_gemini)
+                response = future.result(timeout=timeout_sec)
                 text = getattr(response, "text", None)
                 if text is None and hasattr(response, "candidates") and response.candidates:
                     parts = getattr(response.candidates[0].content, "parts", [])
                     text = (parts[0].text if parts else None) or ""
                 return {"reply": (text or "").strip() or "No reply generated."}
+            except FuturesTimeoutError:
+                last_err = Exception("Request timed out")
+                raise HTTPException(
+                    504,
+                    f"Coach request took too long (>{timeout_sec}s). Try again or use a shorter clip.",
+                )
             except Exception as e:
                 last_err = e
                 err = str(e)
                 if "429" not in err and "RESOURCE_EXHAUSTED" not in err and "quota" not in err.lower():
                     raise
-                if attempt >= 2:
+                if attempt >= 1:
                     raise
-                delay = 25
+                delay = 15
                 match = re.search(r"retry in (\d+(?:\.\d+)?)\s*s", err, re.I)
                 if match:
-                    delay = max(5, min(60, int(float(match.group(1)) + 1)))
+                    delay = max(5, min(45, int(float(match.group(1)) + 1)))
                 time.sleep(delay)
         raise last_err
     except HTTPException:
         raise
     except Exception as e:
         err = str(e)
-        if "API_KEY" in err or "api_key" in err or "403" in err:
-            raise HTTPException(503, "Invalid or missing Gemini API key.")
+        if "API_KEY" in err or "api_key" in err or "403" in err or "FORBIDDEN" in err:
+            raise HTTPException(
+                503,
+                "Gemini API key was rejected. Check that the key is valid at https://aistudio.google.com/apikey and that GEMINI_API_KEY on the server has no extra spaces.",
+            )
         if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
             raise HTTPException(
                 429,

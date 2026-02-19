@@ -180,12 +180,16 @@ export default function App() {
     setChatInput('')
     setChatLoading(true)
     try {
-      const r = await fetch(`${API_BASE}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, frames: result.frames }),
-      })
-      const data = await r.json().catch(() => ({}))
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 60_000)
+        const r = await fetch(`${API_BASE}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, frames: result.frames }),
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+        const data = await r.json().catch(() => ({}))
       if (!r.ok) {
         setChatMessages((prev) => [
           ...prev,
@@ -195,10 +199,11 @@ export default function App() {
       }
       setChatMessages((prev) => [...prev, { role: 'assistant', content: data.reply || 'No reply.' }])
     } catch (e) {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: e?.message || 'Request failed. Check the backend and GEMINI_API_KEY.' },
-      ])
+      const msg =
+        e?.name === 'AbortError'
+          ? 'Request timed out. Try again or use a shorter clip.'
+          : (e?.message || 'Request failed. Try again.')
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: msg }])
     } finally {
       setChatLoading(false)
     }
