@@ -223,7 +223,7 @@ async def chat(
             ) from None
         client = genai.Client(api_key=api_key)
         primary = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite").strip() or "gemini-2.0-flash-lite"
-        fallback = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash").strip() or "gemini-1.5-flash"
+        fallback = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
         models_to_try = [primary, fallback] if primary != fallback else [primary]
         config = genai.types.GenerateContentConfig(system_instruction=[system])
         timeout_sec = max(15, min(120, GEMINI_REQUEST_TIMEOUT))
