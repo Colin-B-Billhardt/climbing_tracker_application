@@ -222,21 +222,23 @@ async def chat(
                 "Chat requires the google-genai package. Install with: pip install google-genai",
             ) from None
         client = genai.Client(api_key=api_key)
-        model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite").strip() or "gemini-2.0-flash-lite"
+        primary = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite").strip() or "gemini-2.0-flash-lite"
+        fallback = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash").strip() or "gemini-1.5-flash"
+        models_to_try = [primary, fallback] if primary != fallback else [primary]
         config = genai.types.GenerateContentConfig(system_instruction=[system])
         timeout_sec = max(15, min(120, GEMINI_REQUEST_TIMEOUT))
 
-        def _call_gemini():
+        def _call_gemini(m):
             return client.models.generate_content(
-                model=model,
+                model=m,
                 contents=user_block,
                 config=config,
             )
 
         last_err = None
-        for attempt in range(2):
+        for model in models_to_try:
             try:
-                future = _CHAT_EXECUTOR.submit(_call_gemini)
+                future = _CHAT_EXECUTOR.submit(_call_gemini, model)
                 response = future.result(timeout=timeout_sec)
                 text = getattr(response, "text", None)
                 if text is None and hasattr(response, "candidates") and response.candidates:
@@ -244,7 +246,6 @@ async def chat(
                     text = (parts[0].text if parts else None) or ""
                 return {"reply": (text or "").strip() or "No reply generated."}
             except FuturesTimeoutError:
-                last_err = Exception("Request timed out")
                 raise HTTPException(
                     504,
                     f"Coach request took too long (>{timeout_sec}s). Try again or use a shorter clip.",
@@ -254,13 +255,7 @@ async def chat(
                 err = str(e)
                 if "429" not in err and "RESOURCE_EXHAUSTED" not in err and "quota" not in err.lower():
                     raise
-                if attempt >= 1:
-                    raise
-                delay = 15
-                match = re.search(r"retry in (\d+(?:\.\d+)?)\s*s", err, re.I)
-                if match:
-                    delay = max(5, min(45, int(float(match.group(1)) + 1)))
-                time.sleep(delay)
+                continue
         raise last_err
     except HTTPException:
         raise
