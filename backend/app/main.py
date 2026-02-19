@@ -6,11 +6,39 @@ from contextlib import asynccontextmanager
 from queue import Queue
 
 import aiofiles
-from fastapi import FastAPI, File, Form, Query, UploadFile, HTTPException
+from fastapi import Body, FastAPI, File, Form, Query, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.video_analyzer import analyze_video
+
+
+def _angle_summary_for_llm(frames: list, max_rows: int = 80) -> str:
+    """Build a compact text summary of frame angles for the LLM context."""
+    if not frames:
+        return "No frame data available."
+    step = max(1, len(frames) // max_rows) if len(frames) > max_rows else 1
+    sampled = [f for i, f in enumerate(frames) if i % step == 0]
+    lines = ["frame_index\ttime_s\tL_elbow\tR_elbow\tL_hip\tR_hip\tL_knee\tR_knee"]
+    for f in sampled:
+        le = f.get("left_elbow_deg")
+        re = f.get("right_elbow_deg")
+        lh = f.get("left_hip_deg")
+        rh = f.get("right_hip_deg")
+        lk = f.get("left_knee_deg")
+        rk = f.get("right_knee_deg")
+        parts = [
+            str(f.get("frame_index", "")),
+            str(f.get("time_s", "")),
+            f"{le:.1f}" if le is not None else "-",
+            f"{re:.1f}" if re is not None else "-",
+            f"{lh:.1f}" if lh is not None else "-",
+            f"{rh:.1f}" if rh is not None else "-",
+            f"{lk:.1f}" if lk is not None else "-",
+            f"{rk:.1f}" if rk is not None else "-",
+        ]
+        lines.append("\t".join(parts))
+    return "\n".join(lines) + f"\n(Total frames: {len(frames)}, shown: {len(sampled)})"
 
 
 @asynccontextmanager
@@ -153,6 +181,60 @@ async def analyze_video_endpoint(
                 os.remove(path)
             except OSError:
                 pass
+
+
+@app.post("/api/chat")
+async def chat(
+    body: dict = Body(...),
+):
+    """Send a message with the current analysis (joint angles) as context. Requires GEMINI_API_KEY."""
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(
+            503,
+            "Chat is not configured. Set GEMINI_API_KEY on the server.",
+        )
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise HTTPException(400, "message is required")
+    frames = body.get("frames") or []
+    angle_summary = _angle_summary_for_llm(frames)
+
+    system = (
+        "You are a helpful climbing technique coach. The user has analyzed a climbing video with pose estimation. "
+        "Below is joint angle data (elbow, hip, knee in degrees) per frame (L/R = left/right). "
+        "Answer based on this data when relevant; keep replies concise and actionable."
+    )
+    user_block = f"Joint angle data (tab-separated):\n{angle_summary}\n\nUser question: {message}"
+
+    try:
+        try:
+            from google import genai
+        except ImportError:
+            raise HTTPException(
+                503,
+                "Chat requires the google-genai package. Install with: pip install google-genai",
+            ) from None
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=user_block,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=[system],
+            ),
+        )
+        text = getattr(response, "text", None)
+        if text is None and hasattr(response, "candidates") and response.candidates:
+            parts = getattr(response.candidates[0].content, "parts", [])
+            text = (parts[0].text if parts else None) or ""
+        return {"reply": (text or "").strip() or "No reply generated."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        err = str(e)
+        if "API_KEY" in err or "api_key" in err or "403" in err:
+            raise HTTPException(503, "Invalid or missing Gemini API key.")
+        raise HTTPException(502, f"Gemini request failed: {err}")
 
 
 if __name__ == "__main__":

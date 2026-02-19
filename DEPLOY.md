@@ -116,6 +116,20 @@ You only need this if the site loads but “Analyze video” fails with a CORS o
 
 ---
 
+## Optional: Coach chat (Gemini)
+
+To enable the “Coach chat” panel (ask questions about your joint angles), set a Gemini API key on the **backend** service:
+
+1. Get a free API key at [Google AI Studio](https://aistudio.google.com/apikey).
+2. In Render: **climbing-tracker-api** → **Environment** → **Add Environment Variable**:
+   - **Key:** `GEMINI_API_KEY`
+   - **Value:** your API key (keep it secret).
+3. **Save Changes** so the API redeploys. Chat will work after the next deploy.
+
+If `GEMINI_API_KEY` is not set, the chat panel still appears but requests will fail with a “Chat is not configured” message.
+
+---
+
 ## Quick reference
 
 | What              | Where |

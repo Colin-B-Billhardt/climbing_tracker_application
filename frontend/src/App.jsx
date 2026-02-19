@@ -21,6 +21,10 @@ export default function App() {
   const [frameSkip, setFrameSkip] = useState(2)
   const [progressTotal, setProgressTotal] = useState(0)
   const [progressCurrent, setProgressCurrent] = useState(0)
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatEndRef = useRef(null)
 
   const isVideoFile = useCallback((file) => {
     if (!file) return false
@@ -68,6 +72,7 @@ export default function App() {
     setLoading(true)
     setError(null)
     setResult(null)
+    setChatMessages([])
     setProgressTotal(0)
     setProgressCurrent(0)
     const form = new FormData()
@@ -162,6 +167,41 @@ export default function App() {
     a.download = `joint_angles_${file?.name?.replace(/\.[^.]+$/, '') || 'export'}.csv`
     a.click()
     URL.revokeObjectURL(a.href)
+  }
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
+
+  const sendChat = async () => {
+    const msg = (chatInput || '').trim()
+    if (!msg || !result?.frames?.length || chatLoading) return
+    setChatMessages((prev) => [...prev, { role: 'user', content: msg }])
+    setChatInput('')
+    setChatLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, frames: result.frames }),
+      })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: data.detail || data.message || 'Chat request failed.' },
+        ])
+        return
+      }
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: data.reply || 'No reply.' }])
+    } catch (e) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: e?.message || 'Request failed. Check the backend and GEMINI_API_KEY.' },
+      ])
+    } finally {
+      setChatLoading(false)
+    }
   }
 
   return (
@@ -317,6 +357,89 @@ export default function App() {
           >
             Download CSV
           </button>
+
+          <div style={{ marginTop: '2rem' }}>
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Coach chat</h3>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+              Ask about your joint angles; the coach has this analysis as context. Requires GEMINI_API_KEY on the server.
+            </p>
+            <div
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: 'var(--surface)',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: 320,
+              }}
+            >
+              <div style={{ overflow: 'auto', flex: 1, padding: '0.75rem', minHeight: 120 }}>
+                {chatMessages.length === 0 && (
+                  <div style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>
+                    e.g. “Where are my elbows most bent?” or “Any tips from this clip?”
+                  </div>
+                )}
+                {chatMessages.map((m, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      marginBottom: '0.75rem',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: 'var(--radius)',
+                      background: m.role === 'user' ? 'rgba(196, 165, 116, 0.15)' : 'var(--bg)',
+                      marginLeft: m.role === 'user' ? '2rem' : 0,
+                      marginRight: m.role === 'user' ? 0 : '2rem',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: 'var(--muted)', marginRight: '0.5rem' }}>
+                      {m.role === 'user' ? 'You' : 'Coach'}
+                    </span>
+                    <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.content}</span>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+              <div style={{ padding: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    sendChat()
+                  }}
+                  style={{ display: 'flex', gap: '0.5rem' }}
+                >
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask about your technique…"
+                    disabled={chatLoading}
+                    style={{
+                      flex: 1,
+                      padding: '0.5rem 0.75rem',
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      color: 'var(--text)',
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={chatLoading || !chatInput.trim()}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: chatLoading || !chatInput.trim() ? 'var(--border)' : 'var(--accent)',
+                      color: chatLoading || !chatInput.trim() ? 'var(--muted)' : 'var(--bg)',
+                      border: 'none',
+                      borderRadius: 'var(--radius)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {chatLoading ? '…' : 'Send'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
         </section>
       )}
     </div>
