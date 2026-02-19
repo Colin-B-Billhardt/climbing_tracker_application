@@ -219,7 +219,7 @@ export default function App() {
           Upload a video to analyze elbow, hip, and knee angles per frame with pose overlay.
         </p>
         <p style={{ color: 'var(--muted)', marginTop: '0.25rem', fontSize: '0.8rem' }}>
-          First load may take up to a minute if the server was idle.
+          First load may take up to a minute if the server was idle. If it hangs, try re-uploading the video or try again.
         </p>
       </header>
 
