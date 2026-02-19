@@ -361,7 +361,7 @@ export default function App() {
           <div style={{ marginTop: '2rem' }}>
             <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Coach chat</h3>
             <p style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-              Ask about your joint angles; the coach has this analysis as context. Requires GEMINI_API_KEY on the server.
+              Ask about your joint angles; the coach has this analysis as context.
             </p>
             <div
               style={{

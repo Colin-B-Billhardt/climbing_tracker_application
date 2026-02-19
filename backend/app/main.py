@@ -1,6 +1,8 @@
 import json
 import os
+import re
 import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from queue import Queue
@@ -216,24 +218,45 @@ async def chat(
                 "Chat requires the google-genai package. Install with: pip install google-genai",
             ) from None
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=user_block,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=[system],
-            ),
-        )
-        text = getattr(response, "text", None)
-        if text is None and hasattr(response, "candidates") and response.candidates:
-            parts = getattr(response.candidates[0].content, "parts", [])
-            text = (parts[0].text if parts else None) or ""
-        return {"reply": (text or "").strip() or "No reply generated."}
+        model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash-lite").strip() or "gemini-2.0-flash-lite"
+        config = genai.types.GenerateContentConfig(system_instruction=[system])
+        last_err = None
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_block,
+                    config=config,
+                )
+                text = getattr(response, "text", None)
+                if text is None and hasattr(response, "candidates") and response.candidates:
+                    parts = getattr(response.candidates[0].content, "parts", [])
+                    text = (parts[0].text if parts else None) or ""
+                return {"reply": (text or "").strip() or "No reply generated."}
+            except Exception as e:
+                last_err = e
+                err = str(e)
+                if "429" not in err and "RESOURCE_EXHAUSTED" not in err and "quota" not in err.lower():
+                    raise
+                if attempt >= 2:
+                    raise
+                delay = 25
+                match = re.search(r"retry in (\d+(?:\.\d+)?)\s*s", err, re.I)
+                if match:
+                    delay = max(5, min(60, int(float(match.group(1)) + 1)))
+                time.sleep(delay)
+        raise last_err
     except HTTPException:
         raise
     except Exception as e:
         err = str(e)
         if "API_KEY" in err or "api_key" in err or "403" in err:
             raise HTTPException(503, "Invalid or missing Gemini API key.")
+        if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+            raise HTTPException(
+                429,
+                "Gemini rate limit reached. Wait a minute or try again later. See https://ai.google.dev/gemini-api/docs/rate-limits",
+            )
         raise HTTPException(502, f"Gemini request failed: {err}")
 
 
