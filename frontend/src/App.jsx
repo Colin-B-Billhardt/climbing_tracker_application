@@ -3,6 +3,16 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 
 const API_BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? '' : '')
 
+// Chart series config (dataKey + color)
+const CHART_SERIES = [
+  { dataKey: 'L elbow (°)', stroke: '#7cb083' },
+  { dataKey: 'R elbow (°)', stroke: '#c4a574' },
+  { dataKey: 'L hip (°)', stroke: '#6b9bd1' },
+  { dataKey: 'R hip (°)', stroke: '#d4a574' },
+  { dataKey: 'L knee (°)', stroke: '#9b7cb0' },
+  { dataKey: 'R knee (°)', stroke: '#b08c7c' },
+]
+
 // MediaPipe pose skeleton connections (pairs of landmark indices)
 const POSE_CONNECTIONS = [
   [11, 12], [11, 13], [13, 15], [15, 17], [15, 19], [15, 21], [17, 19],
@@ -25,6 +35,7 @@ export default function App() {
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef(null)
+  const [visibleChartSeries, setVisibleChartSeries] = useState(() => new Set(CHART_SERIES.map((s) => s.dataKey)))
 
   const isVideoFile = useCallback((file) => {
     if (!file) return false
@@ -342,13 +353,58 @@ export default function App() {
                   contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
                   labelStyle={{ color: 'var(--text)' }}
                 />
-                <Legend />
-                <Line type="monotone" dataKey="L elbow (°)" stroke="#7cb083" dot={false} strokeWidth={1.5} />
-                <Line type="monotone" dataKey="R elbow (°)" stroke="#c4a574" dot={false} strokeWidth={1.5} />
-                <Line type="monotone" dataKey="L hip (°)" stroke="#6b9bd1" dot={false} strokeWidth={1.5} />
-                <Line type="monotone" dataKey="R hip (°)" stroke="#d4a574" dot={false} strokeWidth={1.5} />
-                <Line type="monotone" dataKey="L knee (°)" stroke="#9b7cb0" dot={false} strokeWidth={1.5} />
-                <Line type="monotone" dataKey="R knee (°)" stroke="#b08c7c" dot={false} strokeWidth={1.5} />
+                <Legend
+                  content={() => (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem 1rem', justifyContent: 'center', marginTop: '0.5rem' }}>
+                      {CHART_SERIES.map(({ dataKey, stroke }) => {
+                        const on = visibleChartSeries.has(dataKey)
+                        return (
+                          <label
+                            key={dataKey}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              cursor: 'pointer',
+                              fontSize: 12,
+                              color: 'var(--text)',
+                              opacity: on ? 1 : 0.5,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => {
+                                setVisibleChartSeries((prev) => {
+                                  const next = new Set(prev)
+                                  if (next.has(dataKey)) next.delete(dataKey)
+                                  else next.add(dataKey)
+                                  return next
+                                })
+                              }}
+                              style={{ accentColor: stroke, cursor: 'pointer' }}
+                            />
+                            <span style={{ width: 10, height: 2, background: stroke, flexShrink: 0 }} />
+                            <span>{dataKey}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                />
+                {CHART_SERIES.map(
+                  (s) =>
+                    visibleChartSeries.has(s.dataKey) && (
+                      <Line
+                        key={s.dataKey}
+                        type="monotone"
+                        dataKey={s.dataKey}
+                        stroke={s.stroke}
+                        dot={false}
+                        strokeWidth={1.5}
+                      />
+                    )
+                )}
               </LineChart>
             </ResponsiveContainer>
           </div>
